@@ -82,17 +82,13 @@ function uninstall() {
   deleteAllTriggers();
 }
 
-var startUpdateTime;
-
 // Per-calendar global variables (must be reset before processing each new calendar!)
 var calendarEvents = [];
 var calendarEventsIds = [];
 var targetCalendarId;
 
 // Per-session global variables (must NOT be reset before processing each new calendar!)
-var addedEvents = [];
-var modifiedEvents = [];
-var removedEvents = [];
+var matchedEvents = [];
 
 function startSync() {
   if (

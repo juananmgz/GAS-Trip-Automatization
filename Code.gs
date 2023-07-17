@@ -20,31 +20,32 @@
  *=========================================
  */
 
-const sourceCalendarName = "General";       // Source calendar where events are being set initially
-const targetCalendarName = "Viajes";        // Target calendar where we want to configure the new events
+const sourceCalendarName = "General"; // Source calendar where events are being set initially
+const targetCalendarName = "Viajes"; // Target calendar where we want to configure the new events
 
-const howFrequent = 1;                      // What interval (minutes) to run this script on to check for new events
-const createTripEvent = false;              // TODO: create trip stay event between two trips 
+const howFrequent = 1; // What interval (minutes) to run this script on to check for new events
+const createTripEvent = false; // TODO: create trip stay event between two trips
 
-const moveEventsToNewCalendar = false       // Enable moving the events from source Calendar to Target Calendar
-const deleteExistingEvents = false          // Delates the event from the original Calendar
-const renameExistingEvents = true           // Renames the already created event (if enabled, check to disable deleteExistingCalendar)
-const recolorExistingEvents = true          // Change color of the already created event (if enabled, check to disable deleteExistingCalendar)
+const moveEventsToNewCalendar = false; // Enable moving the events from source Calendar to Target Calendar
+const deleteExistingEvents = false; // Delates the event from the original Calendar
+const renameExistingEvents = false; // Renames the already created event (if enabled, check to disable deleteExistingCalendar)
+const recolorExistingEvents = true; // Change color of the already created event (if enabled, check to disable deleteExistingCalendar)
 
-const transportTags = [                     // Tags to be matched as trip events
-  "Train to", "Flight to"
-]
-
-const newColor = "2"                        // Color to be setted on matching events. You can follow this mapping https://developers.google.com/apps-script/reference/calendar/event-color,
-
-const customFormatForEvent = true           // Enable custom formatting of events
-const customLabels = [                      // Labels to custom formats (name, description...)
+const transportTags = [
+  // Tags to be matched as trip events
+  "Train to",
+  "Flight to",
+];
+const newColor = "2"; // Color to be setted on matching events. You can follow this mapping https://developers.google.com/apps-script/reference/calendar/event-color,
+const customFormatForEvent = true; // Enable custom formatting of events
+const customLabels = [
+  // Labels to custom formats (name, description...)
   {
     company: "Renfe",
     origenLabel: "Departure",
-    destinationLabel: "Arrival"
-  }
-]
+    destinationLabel: "Arrival",
+  },
+];
 
 /*
  *=========================================
@@ -107,16 +108,16 @@ var targetCalendar;
 var targetCalendarId;
 var allEvents = [];
 var transportEvents = [];
-var transportEventsIds = [];
+var transportEventsFormatted = [];
 
 // Per-session global variables (must NOT be reset before processing each new calendar!)
 var matchedEvents = [];
 
 function startSync() {
-  if (ropertiesService.getUserProperties().getProperty("LastRun") > 0 && new Date().getTime() - PropertiesService.getUserProperties().getProperty("LastRun") < 360000) {
-    Logger.log("Another iteration is currently running! Exiting...");
-    return;
-  }
+  /*if (PropertiesService.getUserProperties().getProperty("LastRun") > 0 && new Date().getTime() - PropertiesService.getUserProperties().getProperty("LastRun") < 360000) {
+     Logger.log("Another iteration is currently running! Exiting...");
+     return;
+   }*/
 
   PropertiesService.getUserProperties().setProperty("LastRun", new Date().getTime());
 
@@ -127,10 +128,10 @@ function startSync() {
   targetCalendarId = "";
   allEvents = [];
   transportEvents = [];
-  transportEventsIds = [];
+  transportEventsFormatted = [];
 
-  //------------------------ Get source calendar ------------------------
-  Logger.log('1. Getting "' + sourceCalendarName + '" Source Calendar');
+  //------------------------ Get Source Calendar ------------------------
+  Logger.log('Getting "' + sourceCalendarName + '" Source Calendar');
   sourceCalendar = getCalendar(sourceCalendarName);
 
   if (sourceCalendar == null) {
@@ -140,15 +141,15 @@ function startSync() {
 
   sourceCalendarId = sourceCalendar.getId();
 
-  //------------------------ Find matching elements of source calendar ------------------------
+  //------------------------ Find matching elements of Source Calendar ------------------------
   allEvents = getEventsFromCalendar(sourceCalendar);
 
   //------------------------ Detect transport events --------------------------
-  Logger.log('  1.2. Finding matching elements on "' + sourceCalendarName + '" Source Calendar');
-  checkMatchingElements(allEvents);
+  Logger.log('  - Finding matching elements on "' + sourceCalendarName + '" Source Calendar');
+  checkMatchingElements();
 
-  //------------------------ Get source calendar ------------------------
-  Logger.log('2. Getting "' + targetCalendarName + '" Target Calendar');
+  //------------------------ Get Target Calendar ------------------------
+  Logger.log('Getting "' + targetCalendarName + '" Target Calendar');
   targetCalendar = getCalendar(targetCalendarName);
 
   if (targetCalendar == null) {
@@ -156,30 +157,43 @@ function startSync() {
     return;
   }
 
-  targetCalendarId = targetCalendar.getId();
+  sourceCalendarId = sourceCalendar.getId();
 
-  //------------------------ Create events in target calendar ------------------------
+  //------------------------ Create events in Target Calendar ------------------------
+  Logger.log("Doing extra features");
 
   for (var eventIndex in transportEvents) {
-    //------------------------ Move elements to Target Calendar ------------------------
+    //------------------------ Move event to Target Calendar ------------------------
     if (moveEventsToNewCalendar) {
-      Logger.log('  2.1. Moving matched events to "' + targetCalendarName + '" Target Calendar');
+      Logger.log('  - Moving matched events to "' + targetCalendarName + '" Target Calendar');
       createEventsInNewCalendar(transportEvents[eventIndex], targetCalendar);
     }
 
-    if (renameExistingEvents) {
-      transportEvents[eventIndex].setTitle(formatEventTitle(transportEvents[eventIndex]));
-    }
+    //------------------------ Custom event if the're not being deleted ------------------------
+    if (!deleteExistingEvents) {
+      //------------------------ Rename events on Source Calendar ------------------------
+      if (renameExistingEvents) {
+        Logger.log("     * Renaming event " + transportEvents[eventIndex].getTitle() + "...");
+        transportEvents[eventIndex].setTitle(formatEventTitle(transportEvents[eventIndex]));
+      }
 
-    if (recolorExistingEvents) {
-      Logger.log(transportEvents[eventIndex].getColor());
-      transportEvents[eventIndex].setColor(newColor);
+      //------------------------ Recolor events on Source Calendar ------------------------
+      if (recolorExistingEvents) {
+        Logger.log("     * Recolor event " + transportEvents[eventIndex].getTitle() + "...");
+        transportEvents[eventIndex].setColor(newColor);
+      }
     }
   }
 
-  //------------------------ Remove old events from source calendar ------------------------
+  //------------------------ Create trip event in Target Calendar ------------------------
+  if (createTripEvent) {
+    Logger.log('Creating trip events on "' + targetCalendarName + '" Target Calendar');
+    generateTripEvents(transportEvents, targetCalendar);
+  }
+
+  //------------------------ Remove old events from Source Calendar ------------------------
   if (deleteExistingEvents) {
-    Logger.log('  2.2. Removing matched events to "' + sourceCalendarName + '" Source Calendar');
+    Logger.log('Removing matched events to "' + sourceCalendarName + '" Source Calendar');
     removeEventsInOldCalendar(transportEvents);
   }
 

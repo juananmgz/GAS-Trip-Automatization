@@ -20,26 +20,24 @@
  *=========================================
  */
 
-const sourceCalendarName = "General"; // Source calendar where events are being set initially
-const targetCalendarName = "Viajes"; // Target calendar where we want to configure the new events
+const sourceCalendarName = "General";  // Source calendar where events are being set initially
+const targetCalendarName = "Viajes";   // Target calendar where we want to configure the new events
 
-const howFrequent = 1; // What interval (minutes) to run this script on to check for new events
-const createTripEvent = false; // TODO: create trip stay event between two trips
+const howFrequent = 1;                 // What interval (minutes) to run this script on to check for new events
+const createTripEvent = true;          // Create trip stay event between two trips
 
 const moveEventsToNewCalendar = false; // Enable moving the events from source Calendar to Target Calendar
-const deleteExistingEvents = false; // Delates the event from the original Calendar
-const renameExistingEvents = false; // Renames the already created event (if enabled, check to disable deleteExistingCalendar)
-const recolorExistingEvents = true; // Change color of the already created event (if enabled, check to disable deleteExistingCalendar)
+const deleteExistingEvents = false;    // Delates the event from the original Calendar
+const renameExistingEvents = false;    // Renames the already created event (if enabled, check to disable deleteExistingCalendar)
+const recolorExistingEvents = true;    // Change color of the already created event (if enabled, check to disable deleteExistingCalendar)
 
-const transportTags = [
-  // Tags to be matched as trip events
+const transportTags = [                // Tags to be matched as trip events
   "Train to",
   "Flight to",
 ];
-const newColor = "2"; // Color to be setted on matching events. You can follow this mapping https://developers.google.com/apps-script/reference/calendar/event-color,
-const customFormatForEvent = true; // Enable custom formatting of events
-const customLabels = [
-  // Labels to custom formats (name, description...)
+const newColor = "2";                  // Color to be setted on matching events. You can follow this mapping https://developers.google.com/apps-script/reference/calendar/event-color,
+const customFormatForEvent = true;     // Enable custom formatting of events
+const customLabels = [                 // Labels to custom formats (name, description...)
   {
     company: "Renfe",
     origenLabel: "Departure",
@@ -83,8 +81,6 @@ const customLabels = [
 //!!!!!!!!!!!!!!!! DO NOT EDIT BELOW HERE UNLESS YOU REALLY KNOW WHAT YOU'RE DOING !!!!!!!!!!!!!!!!!!!!
 //=====================================================================================================
 
-var defaultMaxRetries = 10; // Maximum number of retries for api functions (with exponential backoff)
-
 function install() {
   //Delete any already existing triggers so we don't create excessive triggers
   deleteAllTriggers();
@@ -115,9 +111,9 @@ var matchedEvents = [];
 
 function startSync() {
   /*if (PropertiesService.getUserProperties().getProperty("LastRun") > 0 && new Date().getTime() - PropertiesService.getUserProperties().getProperty("LastRun") < 360000) {
-     Logger.log("Another iteration is currently running! Exiting...");
-     return;
-   }*/
+       Logger.log("Another iteration is currently running! Exiting...");
+       return;
+     }*/
 
   PropertiesService.getUserProperties().setProperty("LastRun", new Date().getTime());
 
@@ -159,8 +155,8 @@ function startSync() {
 
   sourceCalendarId = sourceCalendar.getId();
 
-  //------------------------ Create events in Target Calendar ------------------------
-  Logger.log("Doing extra features");
+  //------------------------ Extra Features ------------------------
+  Logger.log("Executing extra features");
 
   for (var eventIndex in transportEvents) {
     //------------------------ Move event to Target Calendar ------------------------
@@ -187,8 +183,8 @@ function startSync() {
 
   //------------------------ Create trip event in Target Calendar ------------------------
   if (createTripEvent) {
-    Logger.log('Creating trip events on "' + targetCalendarName + '" Target Calendar');
-    generateTripEvents(transportEvents, targetCalendar);
+    Logger.log("Creating trip stays events");
+    generateTripEvents();
   }
 
   //------------------------ Remove old events from Source Calendar ------------------------

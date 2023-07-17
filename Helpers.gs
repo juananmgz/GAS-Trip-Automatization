@@ -48,7 +48,7 @@ function getCalendar(calendarName) {
     return null;
   }
 
-  Logger.log('  1.1. Found calendar "' + calendars[0].getName() + '" (' + calendars[0].getId() + ")");
+  Logger.log('  - Found calendar "' + calendars[0].getName() + '" (' + calendars[0].getId() + ")");
   return calendars[0];
 }
 
@@ -68,16 +68,33 @@ function getEventsFromCalendar(calendar) {
 
 /**
  * Check if on the events array exists any event that fits on the transport topic.
+ * If matches with that topic, pushes it into transportEvents, and gets the origen and
+ * destination and stores it in transportEventsFormatted
  *
- * @param {array} Collection of events we need to clasify (CalendarEvent class)
  * @return {array} Collection of matching events
  */
-function checkMatchingElements(events) {
-  for (var eventIndex in events) {
+function checkMatchingElements() {
+  for (var eventIndex in allEvents) {
     for (var tagIndex in transportTags) {
-      if (events[eventIndex].getTitle().toLowerCase().includes(transportTags[tagIndex].toLowerCase())) {
-        transportEvents.push(events[eventIndex]);
-        Logger.log("    - " + events[eventIndex].getTitle());
+      let title = allEvents[eventIndex].getTitle().toUpperCase();
+
+      // Check if matches with any transport tag
+      if (title.includes(transportTags[tagIndex].toUpperCase())) {
+        Logger.log("     * " + allEvents[eventIndex].getTitle() + " (" + allEvents[eventIndex].getId() + ")");
+        transportEvents.push(allEvents[eventIndex]);
+
+        // Get origen and destination
+        var data = {
+          eventId: allEvents[eventIndex].getId(),
+          origen: allEvents[eventIndex].getLocation(),
+          destination: "??",
+          alreadyUsed: false,
+        };
+
+        var titleSplitted = title.split(transportTags[tagIndex].toUpperCase());
+        data.destination = titleSplitted[1].trim();
+        transportEventsFormatted.push(data);
+        break;
       }
     }
   }
@@ -118,9 +135,9 @@ function removeEventsInOldCalendar(events) {
 }
 
 /**
- * Detect origen and destination by reading the description of the event
+ * Format title of the event
  *
- * @param {array} Collection of events we need to clasify (CalendarEvent class)
+ * @param {CalendarEvent} Event from we need to get the data
  * @return {array} Collection of matching events
  */
 function formatEventTitle(event) {
@@ -128,18 +145,49 @@ function formatEventTitle(event) {
     return event.getTitle();
   }
 
-  var origen = event.getLocation();
-  var destination = "";
+  data = transportEventsFormatted.find((obj) => obj.eventId === event.getId());
 
-  let title = event.getTitle().toUpperCase();
+  return data.origen + " → " + data.destination;
+}
 
-  for (var tagIndex in transportTags) {
-    if (title.includes(transportTags[tagIndex].toUpperCase())) {
-      var titleSplitted = title.split(transportTags[tagIndex].toUpperCase());
-      destination = titleSplitted[1].trim();
-      break;
+/**
+ * Generate trip events for round trips. Having 2 trips A and B, we need to detect
+ * go & back trips (A.origen == B.destination and A.origen == B.destination)
+ *
+ * @param {CalendarEvent} Event from we need to get the data
+ * @return {array} Collection of matching events
+ */
+function generateTripEvents(event) {
+  for (var eventIndex in transportEventsFormatted) {
+    // Checks if first trip destination is equal to second trip origen
+    let destinationTmp = transportEventsFormatted[eventIndex].destination;
+
+    // If is not already used for other trip
+    if (!transportEventsFormatted[eventIndex].alreadyUsed) {
+      for (var i = eventIndex; i < transportEventsFormatted.length; i++) {
+        if (destinationTmp == transportEventsFormatted[i].origen) {
+          // Creates the event in targetCalendar
+
+          var startEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[eventIndex].eventId);
+          var endEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[i].eventId);
+
+          let startTime = startEvent.getEndTime();
+          let endTime = endEvent.getStartTime();
+
+          // Maximum one month trips
+          oneMonth = 30 * 24 * 60 * 60 * 1000;
+          if (startTime.getMonth() + oneMonth > endTime.getMonth()) {
+            targetCalendar.createEvent(transportEventsFormatted[eventIndex].destination, startTime, endTime, {
+              location: transportEventsFormatted[eventIndex].destination,
+            });
+
+            startEvent.alreadyUsed = true;
+            endEvent.alreadyUsed = true;
+
+            Logger.log("     * Creating new Stay Event in " + transportEventsFormatted[eventIndex].destination);
+          }
+        }
+      }
     }
   }
-
-  return origen + " → " + destination;
 }

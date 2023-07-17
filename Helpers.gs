@@ -1,5 +1,5 @@
 /**
- * Takes an intended frequency in minutes and adjusts it to be the closest 
+ * Takes an intended frequency in minutes and adjusts it to be the closest
  * acceptable value to use Google "everyMinutes" trigger setting (i.e. one of
  * the following values: 1, 5, 10, 15, 30).
  *
@@ -11,14 +11,13 @@ function getValidTriggerFrequency(origFrequency) {
     Logger.log("No valid frequency specified. Defaulting to 15 minutes.");
     return 15;
   }
-  
-  var adjFrequency = Math.round(origFrequency/5) * 5; // Set the number to be the closest divisible-by-5
+
+  var adjFrequency = Math.round(origFrequency / 5) * 5; // Set the number to be the closest divisible-by-5
   adjFrequency = Math.max(adjFrequency, 1); // Make sure the number is at least 1 (0 is not valid for the trigger)
   adjFrequency = Math.min(adjFrequency, 15); // Make sure the number is at most 15 (will check for the 30 value below)
-  
-  if((adjFrequency == 15) && (Math.abs(origFrequency-30) < Math.abs(origFrequency-15)))
-    adjFrequency = 30; // If we adjusted to 15, but the original number is actually closer to 30, set it to 30 instead
-  
+
+  if (adjFrequency == 15 && Math.abs(origFrequency - 30) < Math.abs(origFrequency - 15)) adjFrequency = 30; // If we adjusted to 15, but the original number is actually closer to 30, set it to 30 instead
+
   Logger.log("Intended frequency = " + origFrequency + ", Adjusted frequency = " + adjFrequency);
   return adjFrequency;
 }
@@ -29,11 +28,7 @@ function getValidTriggerFrequency(origFrequency) {
 function deleteAllTriggers() {
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
-    if (
-      ["startSync", "install", "main", "checkForUpdate"].includes(
-        triggers[i].getHandlerFunction()
-      )
-    ) {
+    if (["startSync", "install", "main", "checkForUpdate"].includes(triggers[i].getHandlerFunction())) {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }
@@ -48,12 +43,12 @@ function deleteAllTriggers() {
 function getCalendar(calendarName) {
   let calendars = CalendarApp.getCalendarsByName(calendarName);
 
-  if(calendars.length == 0) {
+  if (calendars.length == 0) {
     Logger.log('[ERROR] No calendar found with name: "' + calendarName + '"');
     return null;
   }
 
-  Logger.log('  1.1. Found calendar "' + calendars[0].getName() + '" (' + calendars[0].getId() + ')');
+  Logger.log('  1.1. Found calendar "' + calendars[0].getName() + '" (' + calendars[0].getId() + ")");
   return calendars[0];
 }
 
@@ -65,14 +60,14 @@ function getCalendar(calendarName) {
  */
 function getEventsFromCalendar(calendar) {
   let now = new Date();
-  let oneYearFromNow = new Date(now.getTime() + (1 * 365 * 24 * 60 * 60 * 1000));
+  let oneYearFromNow = new Date(now.getTime() + 1 * 365 * 24 * 60 * 60 * 1000);
   var events = calendar.getEvents(now, oneYearFromNow);
 
-  return events
+  return events;
 }
 
 /**
- * Check if on the events array exists any event that fits on the transport topic. 
+ * Check if on the events array exists any event that fits on the transport topic.
  *
  * @param {array} Collection of events we need to clasify (CalendarEvent class)
  * @return {array} Collection of matching events
@@ -80,37 +75,32 @@ function getEventsFromCalendar(calendar) {
 function checkMatchingElements(events) {
   for (var eventIndex in events) {
     for (var tagIndex in transportTags) {
-      if(events[eventIndex].getTitle().includes(transportTags[tagIndex])) {
-        transportEvents.push(events[eventIndex])
-        Logger.log("    - " + events[eventIndex].getTitle())
+      if (events[eventIndex].getTitle().toLowerCase().includes(transportTags[tagIndex].toLowerCase())) {
+        transportEvents.push(events[eventIndex]);
+        Logger.log("    - " + events[eventIndex].getTitle());
       }
     }
   }
 
-  return 
+  return;
 }
 
 /**
- * Copies each event in the target calendar recieved by parameter 
+ * Copies each event in the target calendar recieved by parameter
  *
  * @param {array} Collection of events we need to clasify (CalendarEvent class)
  * @param {Calenar} Calendar where events will be added
  * @return {array} Collection of matching events
  */
-function createEventsInNewCalendar(events, calendar) {
-  for (var eventIndex in events) {
-    calendar.createEvent(
-      events[eventIndex].getTitle(),
-      events[eventIndex].getStartTime(),
-      events[eventIndex].getEndTime(),
-      {
-        description: events[eventIndex].getDescription(),
-        location: events[eventIndex].getLocation(),
-      }
-    )
-  }
+function createEventInNewCalendar(event, calendar) {
+  var title = formatEventTitle(event);
 
-  return 
+  calendar.createEvent(title, event.getStartTime(), event.getEndTime(), {
+    description: event.getDescription(),
+    location: event.getLocation(),
+  });
+
+  return;
 }
 
 /**
@@ -121,8 +111,35 @@ function createEventsInNewCalendar(events, calendar) {
  */
 function removeEventsInOldCalendar(events) {
   for (var eventIndex in events) {
-    events[eventIndex].deleteEvent()
+    events[eventIndex].deleteEvent();
   }
 
-  return 
+  return;
+}
+
+/**
+ * Detect origen and destination by reading the description of the event
+ *
+ * @param {array} Collection of events we need to clasify (CalendarEvent class)
+ * @return {array} Collection of matching events
+ */
+function formatEventTitle(event) {
+  if (!customFormatForEvent) {
+    return event.getTitle();
+  }
+
+  var origen = event.getLocation();
+  var destination = "";
+
+  let title = event.getTitle().toUpperCase();
+
+  for (var tagIndex in transportTags) {
+    if (title.includes(transportTags[tagIndex].toUpperCase())) {
+      var titleSplitted = title.split(transportTags[tagIndex].toUpperCase());
+      destination = titleSplitted[1].trim();
+      break;
+    }
+  }
+
+  return origen + " → " + destination;
 }

@@ -1,128 +1,190 @@
-/**
- * Takes an intended frequency in minutes and adjusts it to be the closest 
- * acceptable value to use Google "everyMinutes" trigger setting (i.e. one of
- * the following values: 1, 5, 10, 15, 30).
+/*
+ *=========================================
+ *       INSTALLATION INSTRUCTIONS
+ *=========================================
  *
- * @param {?integer} The manually set frequency that the user intends to set.
- * @return {integer} The closest valid value to the intended frequency setting. Defaulting to 15 if no valid input is provided.
+ * 1) Make a copy:
+ *      New Interface: Go to the project overview icon on the left (looks like this: ⓘ), then click the "copy" icon on the top right (looks like two files on top of each other)
+ *      Old Interface: Click in the menu "File" > "Make a copy..." and make a copy to your Google Drive
+ * 2) Settings: Change lines 24-50 to be the settings that you want to use
+ * 3) Install:
+ *      New Interface: Make sure your toolbar says "install" to the right of "Debug", then click "Run"
+ *      Old Interface: Click "Run" > "Run function" > "install"
+ * 4) Authorize: You will be prompted to authorize the program and will need to click "Advanced" > "Go to GAS-Trip-Automatization (unsafe)"
+ * 5) You can also run "startSync" if you want to sync only once (New Interface: change the dropdown to the right of "Debug" from "install" to "startSync")
+ *
+ * **To stop the Script from running click in the menu "Run" > "Run function" > "uninstall" (New Interface: change the dropdown to the right of "Debug" from "install" to "uninstall")
+ *
+ *=========================================
+ *               SETTINGS
+ *=========================================
  */
-function getValidTriggerFrequency(origFrequency) {
-  if (!origFrequency > 0) {
-    Logger.log("No valid frequency specified. Defaulting to 15 minutes.");
-    return 15;
+
+const sourceCalendarName = "General";       // Source calendar where events are being set initially
+const targetCalendarName = "Viajes";        // Target calendar where we want to configure the new events
+
+const howFrequent = 1;                      // What interval (minutes) to run this script on to check for new events
+const createTripEvent = false;              // TODO: create trip stay event between two trips 
+
+const moveEventsToNewCalendar = false       // Enable moving the events from source Calendar to Target Calendar
+const deleteExistingEvents = false          // Delates the event from the original Calendar
+const renameExistingEvents = true           // Renames the already created event (if enabled, check to disable deleteExistingCalendar)
+const recolorExistingEvents = true          // Change color of the already created event (if enabled, check to disable deleteExistingCalendar)
+
+const transportTags = [                     // Tags to be matched as trip events
+  "Train to", "Flight to"
+]
+
+const newColor = "2"                        // Color to be setted on matching events. You can follow this mapping https://developers.google.com/apps-script/reference/calendar/event-color,
+
+const customFormatForEvent = true           // Enable custom formatting of events
+const customLabels = [                      // Labels to custom formats (name, description...)
+  {
+    company: "Renfe",
+    origenLabel: "Departure",
+    destinationLabel: "Arrival"
   }
-  
-  var adjFrequency = Math.round(origFrequency/5) * 5; // Set the number to be the closest divisible-by-5
-  adjFrequency = Math.max(adjFrequency, 1); // Make sure the number is at least 1 (0 is not valid for the trigger)
-  adjFrequency = Math.min(adjFrequency, 15); // Make sure the number is at most 15 (will check for the 30 value below)
-  
-  if((adjFrequency == 15) && (Math.abs(origFrequency-30) < Math.abs(origFrequency-15)))
-    adjFrequency = 30; // If we adjusted to 15, but the original number is actually closer to 30, set it to 30 instead
-  
-  Logger.log("Intended frequency = " + origFrequency + ", Adjusted frequency = " + adjFrequency);
-  return adjFrequency;
+]
+
+/*
+ *=========================================
+ *           ABOUT THE AUTHOR
+ *=========================================
+ *
+ * This program was created by Derek Antrican
+ *
+ * If you would like to see other programs Juanan has made, you can check out
+ * his website: juananmgz.com or his github: https://github.com/juananmgz
+ *
+ *=========================================
+ *            BUGS/FEATURES
+ *=========================================
+ *
+ * Please report any issues at https://github.com/juananmgz/GAS-Trip-Automatization/issues
+ *
+ *=========================================
+ *           $$ DONATIONS $$
+ *=========================================
+ *
+ * If you would like to donate and support the project,
+ * you can do that here: https://www.paypal.me/juananmgz
+ *
+ *=========================================
+ *             CONTRIBUTORS
+ *=========================================
+ * [name]
+ * Github: https://github.com/[github]
+ * Twitter: @[twitter]
+ *
+ */
+
+//=====================================================================================================
+//!!!!!!!!!!!!!!!! DO NOT EDIT BELOW HERE UNLESS YOU REALLY KNOW WHAT YOU'RE DOING !!!!!!!!!!!!!!!!!!!!
+//=====================================================================================================
+
+var defaultMaxRetries = 10; // Maximum number of retries for api functions (with exponential backoff)
+
+function install() {
+  //Delete any already existing triggers so we don't create excessive triggers
+  deleteAllTriggers();
+
+  //Schedule sync routine to explicitly repeat and schedule the initial sync
+  ScriptApp.newTrigger("startSync").timeBased().everyMinutes(getValidTriggerFrequency(howFrequent)).create();
+  ScriptApp.newTrigger("startSync").timeBased().after(1000).create();
+
+  //Schedule sync routine to look for update once per day
+  ScriptApp.newTrigger("checkForUpdate").timeBased().everyDays(1).create();
 }
 
-/**
- * Removes all triggers for the script's 'startSync' and 'install' function.
- */
-function deleteAllTriggers() {
-  var triggers = ScriptApp.getProjectTriggers();
-  for (var i = 0; i < triggers.length; i++) {
-    if (
-      ["startSync", "install", "main", "checkForUpdate"].includes(
-        triggers[i].getHandlerFunction()
-      )
-    ) {
-      ScriptApp.deleteTrigger(triggers[i]);
+function uninstall() {
+  deleteAllTriggers();
+}
+
+// Per-calendar global variables (must be reset before processing each new calendar!)
+var sourceCalendar;
+var sourceCalendarId;
+var targetCalendar;
+var targetCalendarId;
+var allEvents = [];
+var transportEvents = [];
+var transportEventsIds = [];
+
+// Per-session global variables (must NOT be reset before processing each new calendar!)
+var matchedEvents = [];
+
+function startSync() {
+  if (ropertiesService.getUserProperties().getProperty("LastRun") > 0 && new Date().getTime() - PropertiesService.getUserProperties().getProperty("LastRun") < 360000) {
+    Logger.log("Another iteration is currently running! Exiting...");
+    return;
+  }
+
+  PropertiesService.getUserProperties().setProperty("LastRun", new Date().getTime());
+
+  //------------------------ Reset globals ------------------------
+  sourceCalendar = null;
+  sourceCalendarId = "";
+  targetCalendar = null;
+  targetCalendarId = "";
+  allEvents = [];
+  transportEvents = [];
+  transportEventsIds = [];
+
+  //------------------------ Get source calendar ------------------------
+  Logger.log('1. Getting "' + sourceCalendarName + '" Source Calendar');
+  sourceCalendar = getCalendar(sourceCalendarName);
+
+  if (sourceCalendar == null) {
+    Logger.log("Sync failed!");
+    return;
+  }
+
+  sourceCalendarId = sourceCalendar.getId();
+
+  //------------------------ Find matching elements of source calendar ------------------------
+  allEvents = getEventsFromCalendar(sourceCalendar);
+
+  //------------------------ Detect transport events --------------------------
+  Logger.log('  1.2. Finding matching elements on "' + sourceCalendarName + '" Source Calendar');
+  checkMatchingElements(allEvents);
+
+  //------------------------ Get source calendar ------------------------
+  Logger.log('2. Getting "' + targetCalendarName + '" Target Calendar');
+  targetCalendar = getCalendar(targetCalendarName);
+
+  if (targetCalendar == null) {
+    Logger.log("Sync failed!");
+    return;
+  }
+
+  targetCalendarId = targetCalendar.getId();
+
+  //------------------------ Create events in target calendar ------------------------
+
+  for (var eventIndex in transportEvents) {
+    //------------------------ Move elements to Target Calendar ------------------------
+    if (moveEventsToNewCalendar) {
+      Logger.log('  2.1. Moving matched events to "' + targetCalendarName + '" Target Calendar');
+      createEventsInNewCalendar(transportEvents[eventIndex], targetCalendar);
+    }
+
+    if (renameExistingEvents) {
+      transportEvents[eventIndex].setTitle(formatEventTitle(transportEvents[eventIndex]));
+    }
+
+    if (recolorExistingEvents) {
+      Logger.log(transportEvents[eventIndex].getColor());
+      transportEvents[eventIndex].setColor(newColor);
     }
   }
-}
 
-/**
- * Search for a calendar which name matches with the one setted in the const "sourceCalendarName".
- *
- * @param {string} Calendar name to be searched.
- * @return {string} Uuid of the string. If it fails returns null value.
- */
-function getCalendar(calendarName) {
-  let calendars = CalendarApp.getCalendarsByName(calendarName);
-
-  if(calendars.length == 0) {
-    Logger.log('[ERROR] No calendar found with name: "' + calendarName + '"');
-    return null;
+  //------------------------ Remove old events from source calendar ------------------------
+  if (deleteExistingEvents) {
+    Logger.log('  2.2. Removing matched events to "' + sourceCalendarName + '" Source Calendar');
+    removeEventsInOldCalendar(transportEvents);
   }
 
-  Logger.log('  1.1. Found calendar "' + calendars[0].getName() + '" (' + calendars[0].getId() + ')');
-  return calendars[0];
-}
+  //------------------------ Add Recurring Event Instances ------------------------
 
-/**
- * Get elements that matches with the topic we are looking for.
- *
- * @param {Calendar} Calendar from which we want to get the events.
- * @return {array} Collection of events.
- */
-function getEventsFromCalendar(calendar) {
-  let now = new Date();
-  let oneYearFromNow = new Date(now.getTime() + (1 * 365 * 24 * 60 * 60 * 1000));
-  var events = calendar.getEvents(now, oneYearFromNow);
-
-  return events
-}
-
-/**
- * Check if on the events array exists any event that fits on the transport topic. 
- *
- * @param {array} Collection of events we need to clasify (CalendarEvent class)
- * @return {array} Collection of matching events
- */
-function checkMatchingElements(events) {
-  for (var eventIndex in events) {
-    for (var tagIndex in transportTags) {
-      if(events[eventIndex].getTitle().includes(transportTags[tagIndex])) {
-        transportEvents.push(events[eventIndex])
-        Logger.log("    - " + events[eventIndex].getTitle())
-      }
-    }
-  }
-
-  return 
-}
-
-/**
- * Copies each event in the target calendar recieved by parameter 
- *
- * @param {array} Collection of events we need to clasify (CalendarEvent class)
- * @param {Calenar} Calendar where events will be added
- * @return {array} Collection of matching events
- */
-function createEventsInNewCalendar(events, calendar) {
-  for (var eventIndex in events) {
-    calendar.createEvent(
-      events[eventIndex].getTitle(),
-      events[eventIndex].getStartTime(),
-      events[eventIndex].getEndTime(),
-      {
-        description: events[eventIndex].getDescription(),
-        location: events[eventIndex].getLocation(),
-      }
-    )
-  }
-
-  return 
-}
-
-/**
- * Deletes each event in the source calendar recieved by parameter
- *
- * @param {array} Collection of events we need to clasify (CalendarEvent class)
- * @return {array} Collection of matching events
- */
-function removeEventsInOldCalendar(events) {
-  for (var eventIndex in events) {
-    events[eventIndex].deleteEvent()
-  }
-
-  return 
+  Logger.log("Sync finished!");
+  PropertiesService.getUserProperties().setProperty("LastRun", 0);
 }

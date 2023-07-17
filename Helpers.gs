@@ -166,28 +166,57 @@ function generateTripEvents(event) {
     if (!transportEventsFormatted[eventIndex].alreadyUsed) {
       for (var i = eventIndex; i < transportEventsFormatted.length; i++) {
         if (destinationTmp == transportEventsFormatted[i].origen) {
-          // Creates the event in targetCalendar
-
           var startEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[eventIndex].eventId);
           var endEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[i].eventId);
+          var location = transportEventsFormatted[eventIndex].destination;
 
           let startTime = startEvent.getEndTime();
           let endTime = endEvent.getStartTime();
 
-          // Maximum one month trips
-          oneMonth = 30 * 24 * 60 * 60 * 1000;
+          oneMonth = 30 * 24 * 60 * 60 * 1000; // Maximum one month trips
+
+          // Creates the event in targetCalendar
           if (startTime.getMonth() + oneMonth > endTime.getMonth()) {
-            targetCalendar.createEvent(transportEventsFormatted[eventIndex].destination, startTime, endTime, {
-              location: transportEventsFormatted[eventIndex].destination,
+            targetCalendar.createEvent(permuteTitle(location), startTime, endTime, {
+              location: location,
             });
 
             startEvent.alreadyUsed = true;
             endEvent.alreadyUsed = true;
 
-            Logger.log("     * Creating new Stay Event in " + transportEventsFormatted[eventIndex].destination);
+            Logger.log("     * Creating new Stay Event in " + permuteTitle(location));
           }
         }
       }
     }
   }
+}
+
+/**
+ * Generate trip events for round trips. Having 2 trips A and B, we need to detect
+ * go & back trips (A.origen == B.destination and A.origen == B.destination)
+ *
+ * @param {CalendarEvent} Event from we need to get the data
+ * @return {array} Collection of matching events
+ */
+function permuteTitle(origTitle) {
+  var title = permuter[origTitle];
+
+  return title ? capitalizeFirstLetter(title) : origTitle;
+}
+
+/**
+ * Capitalize first letter of each word in the string recieved by parameter
+ *
+ * @param {string} text to format
+ * @return {string} text formatted
+ */
+function capitalizeFirstLetter(text) {
+  const textSplitted = text.split(" ");
+
+  for (var i = 0; i < textSplitted.length; i++) {
+    textSplitted[i] = textSplitted[i].charAt(0).toUpperCase() + textSplitted[i].slice(1);
+  }
+
+  return textSplitted.join(" ");
 }

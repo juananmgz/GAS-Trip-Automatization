@@ -45,6 +45,8 @@ const customLabels = [                 // Labels to custom formats (name, descri
   },
 ];
 
+const createTestSuite = false;         // Create test suite to test new features
+
 /*
  *=========================================
  *           ABOUT THE AUTHOR
@@ -136,6 +138,11 @@ function startSync() {
   }
 
   sourceCalendarId = sourceCalendar.getId();
+
+  //------------------------ Test Suite ------------------------
+  if (createTestSuite) {
+    addTestEvents();
+  }
 
   //------------------------ Find matching elements of Source Calendar ------------------------
   allEvents = getEventsFromCalendar(sourceCalendar);

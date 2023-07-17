@@ -1,7 +1,6 @@
-Steps:
+TODO:
 
-1. Fetch Calendar --> Get ID
-2. With ID --> Get elements
-3. Elements --> Get names and identify who are TRAINS and FLIGHTS
-4. Create them on "Transport" calendar
-5. Delete them from actual calendar
+- Detect if an event is already created in the TargetCalendar
+  - On move events to Target Calendar
+  - On create stay trip event
+- Use Case: Multiple stays trips

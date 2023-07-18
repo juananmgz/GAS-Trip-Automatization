@@ -160,7 +160,6 @@ function createTestEvents() {
  * Create test suite with testData
  */
 function cleanTestEvents() {
-  let now = new Date();
   let oneMonthFromNow = new Date(now.getTime() + 1 * 30 * 24 * 60 * 60 * 1000);
 
   let events = sourceCalendar.getEvents(now, oneMonthFromNow);

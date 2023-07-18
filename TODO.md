@@ -1,6 +1,4 @@
 TODO:
 
-- Detect if an event is already created in the TargetCalendar
-  - On move events to Target Calendar
-  - On create stay trip event
+- If one trip has been deleted, delete the stay
 - Dictionary of stations (??)

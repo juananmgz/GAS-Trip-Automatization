@@ -32,6 +32,8 @@ function deleteAllTriggers() {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }
+
+  return;
 }
 
 /**
@@ -111,10 +113,17 @@ function checkMatchingElements() {
 function createEventInNewCalendar(event, calendar) {
   var title = formatEventTitle(event);
 
+  if (calendar.getEventsForDay(event.getStartTime(), { search: event.getTitle() }).length) {
+    Logger.log("     * Skipping copying Event " + title + " in " + targetCalendarName + ". Already created!");
+    return;
+  }
+
   calendar.createEvent(title, event.getStartTime(), event.getEndTime(), {
     description: event.getDescription(),
     location: event.getLocation(),
   });
+
+  Logger.log("     * Copying Event " + title + " in " + targetCalendarName);
 
   return;
 }
@@ -141,8 +150,6 @@ function removeEventsInOldCalendar(events) {
  * @return {array} Collection of matching events
  */
 function generateTripEvents(event) {
-  var rangeTime = 31 * 24 * 60; // Maximum one month trips
-  let now = new Date();
   var dateFromNow = new Date(now.getTime() + rangeTime * 60 * 1000);
 
   for (var eventIndex in transportEventsFormatted) {
@@ -182,6 +189,8 @@ function generateTripEvents(event) {
       }
     }
   }
+
+  return;
 }
 
 /**

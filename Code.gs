@@ -26,7 +26,8 @@ const targetCalendarName = "Viajes";   // Target calendar where we want to confi
 const howFrequent = 1;                 // What interval (minutes) to run this script on to check for new events
 const createTripEvent = true;          // Create trip stay event between two trips
 
-const moveEventsToNewCalendar = false; // Enable moving the events from source Calendar to Target Calendar
+const moveEventsToNewCalendar = true; // Enable moving the events from source Calendar to Target Calendar
+const customFormatForEvent = false;    // Enable custom formatting of events
 const deleteExistingEvents = false;    // Delates the event from the original Calendar
 const renameExistingEvents = false;    // Renames the already created event (if enabled, check to disable deleteExistingCalendar)
 const recolorExistingEvents = true;    // Change color of the already created event (if enabled, check to disable deleteExistingCalendar)
@@ -36,15 +37,17 @@ const transportTags = [                // Tags to be matched as trip events
   "Flight to",
   "Bus to",
 ];
-const newColor = "2";                  // Color to be setted on matching events. You can follow this mapping https://developers.google.com/apps-script/reference/calendar/event-color,
-const customFormatForEvent = true;     // Enable custom formatting of events
-const customLabels = [                 // Labels to custom formats (name, description...)
+/*const customLabels = [                 // Labels to custom formats (name, description...)
   {
     company: "Renfe",
     origenLabel: "Departure",
     destinationLabel: "Arrival",
   },
-];
+];*/
+const newColor = "2";                  // Color to be setted on matching events. You can follow this mapping https://developers.google.com/apps-script/reference/calendar/event-color,
+
+const rangeTime = 31 * 24 * 60; // Maximum one month trips
+const now = new Date();
 
 /*
  *=========================================
@@ -111,10 +114,10 @@ var transportEventsFormatted = [];
 var matchedEvents = [];
 
 function startSync() {
-  /*if (PropertiesService.getUserProperties().getProperty("LastRun") > 0 && new Date().getTime() - PropertiesService.getUserProperties().getProperty("LastRun") < 360000) {
+  if (PropertiesService.getUserProperties().getProperty("LastRun") > 0 && new Date().getTime() - PropertiesService.getUserProperties().getProperty("LastRun") < 360000) {
     Logger.log("Another iteration is currently running! Exiting...");
     return;
-  }*/
+  }
 
   PropertiesService.getUserProperties().setProperty("LastRun", new Date().getTime());
 
@@ -165,7 +168,7 @@ function startSync() {
   for (var eventIndex in transportEvents) {
     //------------------------ Move event to Target Calendar ------------------------
     if (moveEventsToNewCalendar) {
-      createEventsInNewCalendar(transportEvents[eventIndex], targetCalendar);
+      createEventInNewCalendar(transportEvents[eventIndex], targetCalendar);
     }
 
     //------------------------ Custom event if the're not being deleted ------------------------
@@ -190,8 +193,12 @@ function startSync() {
 
   //------------------------ Remove old events from Source Calendar ------------------------
   if (deleteExistingEvents) {
-    Logger.log('Removing matched events to "' + sourceCalendarName + '" Source Calendar');
-    removeEventsInOldCalendar(transportEvents);
+    if (moveEventsToNewCalendar) {
+      Logger.log('Removing matched events to "' + sourceCalendarName + '" Source Calendar');
+      removeEventsInOldCalendar(transportEvents);
+    } else {
+      Logger.log("[ERROR] For removing events, you need to move them to other calendar!");
+    }
   }
 
   //------------------------ Add Recurring Event Instances ------------------------

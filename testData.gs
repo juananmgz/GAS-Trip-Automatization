@@ -173,10 +173,9 @@ function cleanTestEvents() {
 
       for (var staysIndex in stays) {
         let stayStartTime = targetCalendar.getEventById(stays[staysIndex].getId()).getStartTime();
-        let timeDifference = (stayStartTime - tripEndTime) / 60000;
 
         // Delete stay if difference is less than 1 min
-        if (timeDifference < 1 && -1 < timeDifference) {
+        if (checkTwoDates(stayStartTime, tripEndTime, 1)) {
           stays[staysIndex].deleteEvent();
         }
       }

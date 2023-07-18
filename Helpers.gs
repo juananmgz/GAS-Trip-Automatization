@@ -141,28 +141,42 @@ function removeEventsInOldCalendar(events) {
  * @return {array} Collection of matching events
  */
 function generateTripEvents(event) {
+  var rangeTime = 31 * 24 * 60; // Maximum one month trips
+  let now = new Date();
+  var dateFromNow = new Date(now.getTime() + rangeTime * 60 * 1000);
+
   for (var eventIndex in transportEventsFormatted) {
     // Checks if first trip destination is equal to second trip origen
-    let destinationTmp = transportEventsFormatted[eventIndex].destination;
+    let location = permuteTitle(transportEventsFormatted[eventIndex].destination);
 
     for (var i = eventIndex; i < transportEventsFormatted.length; i++) {
-      if (destinationTmp == transportEventsFormatted[i].origen) {
+      if (location == permuteTitle(transportEventsFormatted[i].origen)) {
         var startEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[eventIndex].eventId);
         var endEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[i].eventId);
-        var location = transportEventsFormatted[eventIndex].destination;
 
         let startTime = startEvent.getEndTime();
         let endTime = endEvent.getStartTime();
 
-        oneMonth = 30 * 24 * 60 * 60 * 1000; // Maximum one month trips
+        // Creates the event in targetCalendar (only if theres one month or less between start and end)
+        if (checkTwoDates(startTime, endTime, rangeTime)) {
+          // Checks if exists already a trip event, and skips if it does
+          let exists = false;
+          let stays = targetCalendar.getEvents(now, dateFromNow);
 
-        // Creates the event in targetCalendar
-        if (startTime.getMonth() + oneMonth > endTime.getMonth()) {
-          targetCalendar.createEvent(permuteTitle(location), startTime, endTime, {
-            location: location,
-          });
+          for (var staysIndex in stays) {
+            if (checkTwoDates(startTime, targetCalendar.getEventById(stays[staysIndex].getId()).getStartTime(), 5)) {
+              Logger.log("     * Skipping creating Stay Event in " + permuteTitle(location) + ". Already created!");
+              exists = true;
+            }
+          }
 
-          Logger.log("     * Creating new Stay Event in " + permuteTitle(location));
+          if (!exists) {
+            targetCalendar.createEvent(permuteTitle(location), startTime, endTime, {
+              location: location,
+            });
+
+            Logger.log("     * Creating new Stay Event in " + permuteTitle(location));
+          }
           break;
         }
       }
@@ -196,7 +210,7 @@ function formatEventTitle(event) {
 function permuteTitle(origTitle) {
   var title = permuter[origTitle];
 
-  return title ? capitalizeFirstLetter(title) : origTitle;
+  return title ? capitalizeFirstLetter(title) : capitalizeFirstLetter(origTitle);
 }
 
 /**
@@ -213,4 +227,23 @@ function capitalizeFirstLetter(text) {
   }
 
   return textSplitted.join(" ");
+}
+
+/**
+ * Checks if the difference between two dates is in the range
+ *
+ * @param {Date} date number 1 to be compared
+ * @param {Date} date number 2 to be compared
+ * @param {number} maximum range where the difference should be
+ * @return {boolean} true if the difference is in the rande
+ */
+function checkTwoDates(date1, date2, range) {
+  let timeDifference = (date1 - date2) / 60000;
+
+  // Delete stay if difference is less than 1 min
+  if (timeDifference < range && -1 * range < timeDifference) {
+    return true;
+  }
+
+  return false;
 }

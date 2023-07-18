@@ -34,6 +34,7 @@ const recolorExistingEvents = true;    // Change color of the already created ev
 const transportTags = [                // Tags to be matched as trip events
   "Train to",
   "Flight to",
+  "Bus to",
 ];
 const newColor = "2";                  // Color to be setted on matching events. You can follow this mapping https://developers.google.com/apps-script/reference/calendar/event-color,
 const customFormatForEvent = true;     // Enable custom formatting of events
@@ -44,8 +45,6 @@ const customLabels = [                 // Labels to custom formats (name, descri
     destinationLabel: "Arrival",
   },
 ];
-
-const createTestSuite = false;         // Create test suite to test new features
 
 /*
  *=========================================
@@ -113,9 +112,9 @@ var matchedEvents = [];
 
 function startSync() {
   /*if (PropertiesService.getUserProperties().getProperty("LastRun") > 0 && new Date().getTime() - PropertiesService.getUserProperties().getProperty("LastRun") < 360000) {
-       Logger.log("Another iteration is currently running! Exiting...");
-       return;
-     }*/
+    Logger.log("Another iteration is currently running! Exiting...");
+    return;
+  }*/
 
   PropertiesService.getUserProperties().setProperty("LastRun", new Date().getTime());
 
@@ -139,18 +138,6 @@ function startSync() {
 
   sourceCalendarId = sourceCalendar.getId();
 
-  //------------------------ Test Suite ------------------------
-  if (createTestSuite) {
-    addTestEvents();
-  }
-
-  //------------------------ Find matching elements of Source Calendar ------------------------
-  allEvents = getEventsFromCalendar(sourceCalendar);
-
-  //------------------------ Detect transport events --------------------------
-  Logger.log('  - Finding matching elements on "' + sourceCalendarName + '" Source Calendar');
-  checkMatchingElements();
-
   //------------------------ Get Target Calendar ------------------------
   Logger.log('Getting "' + targetCalendarName + '" Target Calendar');
   targetCalendar = getCalendar(targetCalendarName);
@@ -162,13 +149,22 @@ function startSync() {
 
   sourceCalendarId = sourceCalendar.getId();
 
+  //------------------------ Find matching elements of Source Calendar ------------------------
+  allEvents = getEventsFromCalendar(sourceCalendar);
+
+  //------------------------ Detect transport events --------------------------
+  Logger.log('Finding matching elements on "' + sourceCalendarName + '" Source Calendar');
+  checkMatchingElements();
+
   //------------------------ Extra Features ------------------------
   Logger.log("Executing extra features");
+  moveEventsToNewCalendar ? Logger.log('  - Moving matched events to "' + targetCalendarName + '" Target Calendar') : null;
+  renameExistingEvents ? Logger.log("  - Renaming events") : null;
+  recolorExistingEvents ? Logger.log("  - Recoloring events") : null;
 
   for (var eventIndex in transportEvents) {
     //------------------------ Move event to Target Calendar ------------------------
     if (moveEventsToNewCalendar) {
-      Logger.log('  - Moving matched events to "' + targetCalendarName + '" Target Calendar');
       createEventsInNewCalendar(transportEvents[eventIndex], targetCalendar);
     }
 
@@ -176,13 +172,11 @@ function startSync() {
     if (!deleteExistingEvents) {
       //------------------------ Rename events on Source Calendar ------------------------
       if (renameExistingEvents) {
-        Logger.log("     * Renaming event " + transportEvents[eventIndex].getTitle() + "...");
         transportEvents[eventIndex].setTitle(formatEventTitle(transportEvents[eventIndex]));
       }
 
       //------------------------ Recolor events on Source Calendar ------------------------
       if (recolorExistingEvents) {
-        Logger.log("     * Recolor event " + transportEvents[eventIndex].getTitle() + "...");
         transportEvents[eventIndex].setColor(newColor);
       }
     }
@@ -204,4 +198,60 @@ function startSync() {
 
   Logger.log("Sync finished!");
   PropertiesService.getUserProperties().setProperty("LastRun", 0);
+}
+
+/*
+ *=========================================
+ *               TEST SUITE
+ *=========================================
+ */
+
+const createTestSuite = false;  // Create test suite to test new features
+const cleanTestSuite = true;    // Clean test suite to test new features
+const testSuiteChosen = 3;      // You may chose: 1 [simple trip], 2 [2 stays continuous trip], 3 [5 stays continuous trip], 4 [stays overlapping], 5 [TO DO: complex trip]
+
+function startTestSuite() {
+  PropertiesService.getUserProperties().setProperty("LastRun", new Date().getTime());
+
+  //------------------------ Reset globals ------------------------
+  sourceCalendar = null;
+  sourceCalendarId = "";
+  targetCalendar = null;
+  targetCalendarId = "";
+  allEvents = [];
+  transportEvents = [];
+  transportEventsFormatted = [];
+
+  //------------------------ Get Source Calendar ------------------------
+  Logger.log('Getting "' + sourceCalendarName + '" Source Calendar');
+  sourceCalendar = getCalendar(sourceCalendarName);
+
+  if (sourceCalendar == null) {
+    Logger.log("Sync failed!");
+    return;
+  }
+
+  sourceCalendarId = sourceCalendar.getId();
+
+  //------------------------ Get Target Calendar ------------------------
+  Logger.log('Getting "' + targetCalendarName + '" Target Calendar');
+  targetCalendar = getCalendar(targetCalendarName);
+
+  if (targetCalendar == null) {
+    Logger.log("Sync failed!");
+    return;
+  }
+
+  sourceCalendarId = sourceCalendar.getId();
+
+  //------------------------ Test Suite ------------------------
+  Logger.log("[TEST] Preparing test suite...");
+
+  if (cleanTestSuite) {
+    cleanTestEvents();
+  }
+
+  if (createTestSuite) {
+    createTestEvents();
+  }
 }

@@ -88,7 +88,6 @@ function checkMatchingElements() {
           eventId: allEvents[eventIndex].getId(),
           origen: allEvents[eventIndex].getLocation(),
           destination: "??",
-          alreadyUsed: false,
         };
 
         var titleSplitted = title.split(transportTags[tagIndex].toUpperCase());
@@ -135,6 +134,43 @@ function removeEventsInOldCalendar(events) {
 }
 
 /**
+ * Generate trip events for round trips. Having 2 trips A and B, we need to detect
+ * go & back trips (A.origen == B.destination and A.origen == B.destination)
+ *
+ * @param {CalendarEvent} Event from we need to get the data
+ * @return {array} Collection of matching events
+ */
+function generateTripEvents(event) {
+  for (var eventIndex in transportEventsFormatted) {
+    // Checks if first trip destination is equal to second trip origen
+    let destinationTmp = transportEventsFormatted[eventIndex].destination;
+
+    for (var i = eventIndex; i < transportEventsFormatted.length; i++) {
+      if (destinationTmp == transportEventsFormatted[i].origen) {
+        var startEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[eventIndex].eventId);
+        var endEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[i].eventId);
+        var location = transportEventsFormatted[eventIndex].destination;
+
+        let startTime = startEvent.getEndTime();
+        let endTime = endEvent.getStartTime();
+
+        oneMonth = 30 * 24 * 60 * 60 * 1000; // Maximum one month trips
+
+        // Creates the event in targetCalendar
+        if (startTime.getMonth() + oneMonth > endTime.getMonth()) {
+          targetCalendar.createEvent(permuteTitle(location), startTime, endTime, {
+            location: location,
+          });
+
+          Logger.log("     * Creating new Stay Event in " + permuteTitle(location));
+          break;
+        }
+      }
+    }
+  }
+}
+
+/**
  * Format title of the event
  *
  * @param {CalendarEvent} Event from we need to get the data
@@ -157,48 +193,6 @@ function formatEventTitle(event) {
  * @param {CalendarEvent} Event from we need to get the data
  * @return {array} Collection of matching events
  */
-function generateTripEvents(event) {
-  for (var eventIndex in transportEventsFormatted) {
-    // Checks if first trip destination is equal to second trip origen
-    let destinationTmp = transportEventsFormatted[eventIndex].destination;
-
-    // If is not already used for other trip
-    if (!transportEventsFormatted[eventIndex].alreadyUsed) {
-      for (var i = eventIndex; i < transportEventsFormatted.length; i++) {
-        if (destinationTmp == transportEventsFormatted[i].origen) {
-          var startEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[eventIndex].eventId);
-          var endEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[i].eventId);
-          var location = transportEventsFormatted[eventIndex].destination;
-
-          let startTime = startEvent.getEndTime();
-          let endTime = endEvent.getStartTime();
-
-          oneMonth = 30 * 24 * 60 * 60 * 1000; // Maximum one month trips
-
-          // Creates the event in targetCalendar
-          if (startTime.getMonth() + oneMonth > endTime.getMonth()) {
-            targetCalendar.createEvent(permuteTitle(location), startTime, endTime, {
-              location: location,
-            });
-
-            startEvent.alreadyUsed = true;
-            endEvent.alreadyUsed = true;
-
-            Logger.log("     * Creating new Stay Event in " + permuteTitle(location));
-          }
-        }
-      }
-    }
-  }
-}
-
-/**
- * Generate trip events for round trips. Having 2 trips A and B, we need to detect
- * go & back trips (A.origen == B.destination and A.origen == B.destination)
- *
- * @param {CalendarEvent} Event from we need to get the data
- * @return {array} Collection of matching events
- */
 function permuteTitle(origTitle) {
   var title = permuter[origTitle];
 
@@ -212,7 +206,7 @@ function permuteTitle(origTitle) {
  * @return {string} text formatted
  */
 function capitalizeFirstLetter(text) {
-  const textSplitted = text.split(" ");
+  const textSplitted = text.toLowerCase().split(" ");
 
   for (var i = 0; i < textSplitted.length; i++) {
     textSplitted[i] = textSplitted[i].charAt(0).toUpperCase() + textSplitted[i].slice(1);

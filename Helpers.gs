@@ -88,6 +88,7 @@ function checkMatchingElements() {
         // Get origen and destination
         var data = {
           eventId: allEvents[eventIndex].getId(),
+          eventTitle: allEvents[eventIndex].getTitle(),
           origen: allEvents[eventIndex].getLocation(),
           destination: "??",
         };
@@ -156,8 +157,24 @@ function generateTripEvents(event) {
     // Checks if first trip destination is equal to second trip origen
     let location = permuteTitle(transportEventsFormatted[eventIndex].destination);
 
+    Logger.log("  - EVENT: " + transportEventsFormatted[eventIndex].eventTitle);
+
     for (var i = eventIndex; i < transportEventsFormatted.length; i++) {
-      if (location == permuteTitle(transportEventsFormatted[i].origen)) {
+      // Checks if is not a stay (less than 2h 30')
+      let isStay = true;
+
+      if (eventIndex < transportEventsFormatted.length - 1) {
+        var startEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[eventIndex].eventId);
+        var nextEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[+eventIndex + 1].eventId);
+      }
+
+      if (checkTwoDates(startEvent.getEndTime(), nextEvent.getStartTime(), 150)) {
+        Logger.log("     * Skipping creating Stay Event in " + permuteTitle(location) + ". Is not a stay!");
+        isStay = false;
+      }
+
+      // If is not a stay, lets check with the rest mutual locations
+      if (isStay && location == permuteTitle(transportEventsFormatted[i].origen)) {
         var startEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[eventIndex].eventId);
         var endEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[i].eventId);
 
@@ -185,6 +202,8 @@ function generateTripEvents(event) {
             Logger.log("     * Creating new Stay Event in " + permuteTitle(location));
           }
           break;
+        } else {
+          Logger.log("     * Theres no one month ");
         }
       }
     }

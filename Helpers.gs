@@ -28,7 +28,7 @@ function getValidTriggerFrequency(origFrequency) {
 function deleteAllTriggers() {
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
-    if (["startSync", "install", "main", "checkForUpdate"].includes(triggers[i].getHandlerFunction())) {
+    if (["startSync", "install"].includes(triggers[i].getHandlerFunction())) {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }
@@ -168,8 +168,8 @@ function generateTripEvents(event) {
         var nextEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[+eventIndex + 1].eventId);
       }
 
-      if (checkTwoDates(startEvent.getEndTime(), nextEvent.getStartTime(), 150)) {
-        Logger.log("     * Skipping creating Stay Event in " + permuteTitle(location) + ". Is not a stay!");
+      if (checkTwoDates(startEvent.getEndTime(), nextEvent.getStartTime(), 240)) {
+        Logger.log("     * Skipping creating Stay Event in " + permuteTitle(location) + ". It's not a stay!");
         isStay = false;
       }
 

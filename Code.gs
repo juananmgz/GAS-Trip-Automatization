@@ -26,10 +26,10 @@ const targetCalendarName = "Viajes";   // Target calendar where we want to confi
 const howFrequent = 1;                 // What interval (minutes) to run this script on to check for new events
 const createTripEvent = true;          // Create trip stay event between two trips
 
-const moveEventsToNewCalendar = true; // Enable moving the events from source Calendar to Target Calendar
-const customFormatForEvent = false;    // Enable custom formatting of events
-const deleteExistingEvents = false;    // Delates the event from the original Calendar
-const renameExistingEvents = false;    // Renames the already created event (if enabled, check to disable deleteExistingCalendar)
+const moveEventsToNewCalendar = true;  // Enable moving the events from source Calendar to Target Calendar
+const customFormatForEvent = true;     // Enable custom formatting of events
+const deleteExistingEvents = true;     // Delates the event from the original Calendar
+const renameExistingEvents = true;     // Renames the already created event (if enabled, check to disable deleteExistingCalendar)
 const recolorExistingEvents = true;    // Change color of the already created event (if enabled, check to disable deleteExistingCalendar)
 
 const transportTags = [                // Tags to be matched as trip events
@@ -46,15 +46,15 @@ const transportTags = [                // Tags to be matched as trip events
 ];*/
 const newColor = "2";                  // Color to be setted on matching events. You can follow this mapping https://developers.google.com/apps-script/reference/calendar/event-color,
 
-const rangeTime = 31 * 24 * 60; // Maximum one month trips
-const now = new Date();
+const rangeTime = 31 * 24 * 60;        // Maximum one month trips
+const now = new Date();                // Actual Date
 
 /*
  *=========================================
  *           ABOUT THE AUTHOR
  *=========================================
  *
- * This program was created by Derek Antrican
+ * This program was created by Juan Antonio Muñoz Gómez (Juanan)
  *
  * If you would like to see other programs Juanan has made, you can check out
  * his website: juananmgz.com or his github: https://github.com/juananmgz
@@ -161,27 +161,24 @@ function startSync() {
 
   //------------------------ Extra Features ------------------------
   Logger.log("Executing extra features");
-  moveEventsToNewCalendar ? Logger.log('  - Moving matched events to "' + targetCalendarName + '" Target Calendar') : null;
-  renameExistingEvents ? Logger.log("  - Renaming events") : null;
-  recolorExistingEvents ? Logger.log("  - Recoloring events") : null;
 
   for (var eventIndex in transportEvents) {
-    //------------------------ Move event to Target Calendar ------------------------
-    if (moveEventsToNewCalendar) {
-      createEventInNewCalendar(transportEvents[eventIndex], targetCalendar);
+    //------------------------ Rename events on Source Calendar ------------------------
+    if (renameExistingEvents) {
+      Logger.log("  - Renaming events");
+      transportEvents[eventIndex].setTitle(formatEventTitle(transportEvents[eventIndex]));
     }
 
-    //------------------------ Custom event if the're not being deleted ------------------------
-    if (!deleteExistingEvents) {
-      //------------------------ Rename events on Source Calendar ------------------------
-      if (renameExistingEvents) {
-        transportEvents[eventIndex].setTitle(formatEventTitle(transportEvents[eventIndex]));
-      }
+    //------------------------ Recolor events on Source Calendar ------------------------
+    if (recolorExistingEvents) {
+      Logger.log("  - Recoloring events");
+      transportEvents[eventIndex].setColor(newColor);
+    }
 
-      //------------------------ Recolor events on Source Calendar ------------------------
-      if (recolorExistingEvents) {
-        transportEvents[eventIndex].setColor(newColor);
-      }
+    //------------------------ Move event to Target Calendar ------------------------
+    if (moveEventsToNewCalendar) {
+      Logger.log('  - Moving matched events to "' + targetCalendarName + '" Target Calendar');
+      createEventInNewCalendar(transportEvents[eventIndex], targetCalendar);
     }
   }
 
@@ -213,9 +210,9 @@ function startSync() {
  *=========================================
  */
 
-const createTestSuite = false;  // Create test suite to test new features
+const createTestSuite = true;   // Create test suite to test new features
 const cleanTestSuite = true;    // Clean test suite to test new features
-const testSuiteChosen = 3;      // You may chose: 1 [simple trip], 2 [2 stays continuous trip], 3 [5 stays continuous trip], 4 [stays overlapping], 5 [TO DO: complex trip]
+const testSuiteChosen = 1;      // You may chose: 1 [simple trip], 2 [2 stays continuous trip], 3 [5 stays continuous trip], 4 [stays overlapping], 5 [TO DO: complex trip]
 
 function startTestSuite() {
   PropertiesService.getUserProperties().setProperty("LastRun", new Date().getTime());

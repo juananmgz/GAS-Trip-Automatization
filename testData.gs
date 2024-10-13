@@ -187,6 +187,6 @@ function cleanTestEvents() {
 
     Logger.log("  - Cleaning test suite");
   } else {
-    Logger.log("  - [ERROR] Cleaning test suite could not get events on Source or Target Calendar");
+    Logger.log("  - [❗] Cleaning test suite could not get events on Source or Target Calendar");
   }
 }

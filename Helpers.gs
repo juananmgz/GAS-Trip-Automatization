@@ -1,121 +1,128 @@
 /**
- * Takes an intended frequency in minutes and adjusts it to be the closest
- * acceptable value to use Google "everyMinutes" trigger setting (i.e. one of
- * the following values: 1, 5, 10, 15, 30).
+ * Takes an intended frequency in minutes and adjusts it to the closest valid Google "everyMinutes" trigger setting.
  *
- * @param {?integer} The manually set frequency that the user intends to set.
- * @return {integer} The closest valid value to the intended frequency setting. Defaulting to 15 if no valid input is provided.
+ */
+function resetGlobals() {
+  sourceCalendar = targetCalendar = null;
+  allEvents = transportEvents = matchedEvents = [];
+}
+
+function detectTransportEvents() {
+  Logger.log("Finding transport events in source calendar");
+  checkMatchingElements();
+}
+
+function executeExtraFeatures() {
+  Logger.log("- Applying extra features");
+
+  transportEvents.forEach((event) => {
+    if (RENAME_EVENTS) {
+      Logger.log("  * Renaming events");
+      event.setTitle(formatEventTitle(event));
+    }
+    if (RECOLOR_EVENTS) {
+      Logger.log("  * Recoloring events");
+      event.setColor(NEW_EVENT_COLOR);
+    }
+    if (MOVE_EVENTS) {
+      Logger.log(`  * Moving events to ${TARGET_CALENDAR}`);
+      createEventInNewCalendar(event, targetCalendar);
+    }
+  });
+}
+
+/**
+ * Takes an intended frequency in minutes and adjusts it to the closest valid Google "everyMinutes" trigger setting.
+ * Acceptable example values: 1, 5, 10, 15, 30.
+ *
+ * @param {integer} origFrequency - The manually set frequency the user intends to set.
+ * @return {integer} The closest valid frequency, defaulting to 15 if no valid input is provided.
  */
 function getValidTriggerFrequency(origFrequency) {
-  if (!origFrequency > 0) {
-    Logger.log("No valid frequency specified. Defaulting to 15 minutes.");
+  if (origFrequency <= 0) {
+    Logger.log("[❗] No valid frequency specified. Defaulting to 15 minutes.");
     return 15;
   }
 
-  var adjFrequency = Math.round(origFrequency / 5) * 5; // Set the number to be the closest divisible-by-5
-  adjFrequency = Math.max(adjFrequency, 1); // Make sure the number is at least 1 (0 is not valid for the trigger)
-  adjFrequency = Math.min(adjFrequency, 15); // Make sure the number is at most 15 (will check for the 30 value below)
-
-  if (adjFrequency == 15 && Math.abs(origFrequency - 30) < Math.abs(origFrequency - 15)) adjFrequency = 30; // If we adjusted to 15, but the original number is actually closer to 30, set it to 30 instead
-
-  Logger.log("Intended frequency = " + origFrequency + ", Adjusted frequency = " + adjFrequency);
-  return adjFrequency;
+  const closestFreq = Math.min(Math.max(Math.round(origFrequency / 5) * 5, 1), 15);
+  return closestFreq === 15 && Math.abs(origFrequency - 30) < Math.abs(origFrequency - 15) ? 30 : closestFreq;
 }
 
 /**
- * Removes all triggers for the script's 'startSync' and 'install' function.
+ * Removes all triggers for the script's 'startSync' and 'install' functions.
  */
 function deleteAllTriggers() {
-  var triggers = ScriptApp.getProjectTriggers();
-  for (var i = 0; i < triggers.length; i++) {
-    if (["startSync", "install"].includes(triggers[i].getHandlerFunction())) {
-      ScriptApp.deleteTrigger(triggers[i]);
+  ScriptApp.getProjectTriggers().forEach((trigger) => {
+    if (["startSync", "install"].includes(trigger.getHandlerFunction())) {
+      ScriptApp.deleteTrigger(trigger);
     }
-  }
-
-  return;
+  });
 }
 
 /**
- * Search for a calendar which name matches with the one setted in the const "sourceCalendarName".
+ * Search for a calendar matching the name set in the const "sourceCalendarName".
  *
- * @param {string} Calendar name to be searched.
- * @return {string} Uuid of the string. If it fails returns null value.
+ * @param {string} calendarName - The name of the calendar to search for.
+ * @return {Calendar|null} The found calendar, or null if none is found.
  */
 function getCalendar(calendarName) {
-  let calendars = CalendarApp.getCalendarsByName(calendarName);
+  const calendars = CalendarApp.getCalendarsByName(calendarName);
 
-  if (calendars.length == 0) {
-    Logger.log('[ERROR] No calendar found with name: "' + calendarName + '"');
+  if (!calendars.length) {
+    Logger.log(`[❗] No calendar found with name: "${calendarName}"`);
     return null;
   }
 
-  Logger.log('  - Found calendar "' + calendars[0].getName() + '" (' + calendars[0].getId() + ")");
+  Logger.log(`- Found calendar "${calendars[0].getName()}" (${calendars[0].getId()})`);
   return calendars[0];
 }
 
 /**
- * Get elements that matches with the topic we are looking for.
+ * Get events from the calendar occurring within the next year.
  *
- * @param {Calendar} Calendar from which we want to get the events.
- * @return {array} Collection of events.
+ * @param {Calendar} calendar - The calendar to retrieve events from.
+ * @return {CalendarEvent[]} The events occurring within the next year.
  */
 function getEventsFromCalendar(calendar) {
-  let now = new Date();
-  let oneYearFromNow = new Date(now.getTime() + 1 * 365 * 24 * 60 * 60 * 1000);
-  var events = calendar.getEvents(now, oneYearFromNow);
-
-  return events;
+  const now = new Date();
+  const oneYearFromNow = new Date(now.setFullYear(now.getFullYear() + 1));
+  return calendar.getEvents(new Date(), oneYearFromNow);
 }
 
 /**
- * Check if on the events array exists any event that fits on the transport topic.
- * If matches with that topic, pushes it into transportEvents, and gets the origen and
- * destination and stores it in transportEventsFormatted
- *
- * @return {array} Collection of matching events
+ * Check for transport-related events in the events array, extract the relevant details, and store formatted events.
  */
 function checkMatchingElements() {
-  for (var eventIndex in allEvents) {
-    for (var tagIndex in transportTags) {
-      let title = allEvents[eventIndex].getTitle().toUpperCase();
+  allEvents.forEach((event) => {
+    const title = event.getTitle().toUpperCase();
+    transportTags.forEach((tag) => {
+      if (title.includes(tag.toUpperCase())) {
+        Logger.log(`  * ${event.getTitle()} (${event.getId()})`);
+        transportEvents.push(event);
 
-      // Check if matches with any transport tag
-      if (title.includes(transportTags[tagIndex].toUpperCase())) {
-        Logger.log("     * " + allEvents[eventIndex].getTitle() + " (" + allEvents[eventIndex].getId() + ")");
-        transportEvents.push(allEvents[eventIndex]);
-
-        // Get origen and destination
-        var data = {
-          eventId: allEvents[eventIndex].getId(),
-          eventTitle: allEvents[eventIndex].getTitle(),
-          origen: allEvents[eventIndex].getLocation(),
-          destination: "??",
-        };
-
-        var titleSplitted = title.split(transportTags[tagIndex].toUpperCase());
-        data.destination = titleSplitted[1].trim();
-        transportEventsFormatted.push(data);
-        break;
+        const [_, destination] = title.split(tag.toUpperCase());
+        transportEventsFormatted.push({
+          eventId: event.getId(),
+          eventTitle: event.getTitle(),
+          origen: event.getLocation(),
+          destination: destination?.trim() || "??",
+        });
       }
-    }
-  }
-
-  return;
+    });
+  });
 }
 
 /**
- * Copies each event in the target calendar recieved by parameter
+ * Copies an event to the target calendar if it doesn't already exist.
  *
- * @param {array} Collection of events we need to clasify (CalendarEvent class)
- * @param {Calenar} Calendar where events will be added
- * @return {array} Collection of matching events
+ * @param {CalendarEvent} event - The event to copy.
+ * @param {Calendar} calendar - The target calendar.
  */
 function createEventInNewCalendar(event, calendar) {
-  var title = formatEventTitle(event);
+  const title = formatEventTitle(event);
 
   if (calendar.getEventsForDay(event.getStartTime(), { search: event.getTitle() }).length) {
-    Logger.log("     * Skipping copying Event " + title + " in " + targetCalendarName + ". Already created!");
+    Logger.log(`  * Skipping copying Event ${title}. Already exists in ${targetCalendarName}.`);
     return;
   }
 
@@ -124,154 +131,105 @@ function createEventInNewCalendar(event, calendar) {
     location: event.getLocation(),
   });
 
-  Logger.log("     * Copying Event " + title + " in " + targetCalendarName);
-
-  return;
+  Logger.log(`  * Copied Event ${title} to ${targetCalendarName}`);
 }
 
 /**
- * Deletes each event in the source calendar recieved by parameter
+ * Deletes the specified events from the calendar.
  *
- * @param {array} Collection of events we need to clasify (CalendarEvent class)
- * @return {array} Collection of matching events
+ * @param {CalendarEvent[]} events - The events to delete.
  */
 function removeEventsInOldCalendar(events) {
-  for (var eventIndex in events) {
-    events[eventIndex].deleteEvent();
-  }
-
-  return;
+  events.forEach((event) => event.deleteEvent());
 }
 
 /**
- * Generate trip events for round trips. Having 2 trips A and B, we need to detect
- * go & back trips (A.origen == B.destination and A.origen == B.destination)
- *
- * @param {CalendarEvent} Event from we need to get the data
- * @return {array} Collection of matching events
+ * Generate trip events for round trips, detecting go and return trips.
  */
-function generateTripEvents(event) {
-  var dateFromNow = new Date(now.getTime() + rangeTime * 60 * 1000);
+function generateTripEvents() {
+  const dateFromNow = new Date(now.getTime() + rangeTime * 60 * 1000);
 
-  for (var eventIndex in transportEventsFormatted) {
-    // Checks if first trip destination is equal to second trip origen
-    let location = permuteTitle(transportEventsFormatted[eventIndex].destination);
+  transportEventsFormatted.forEach((eventA, indexA) => {
+    const locationA = permuteTitle(eventA.destination);
+    Logger.log(`  * Event: ${eventA.eventTitle}`);
 
-    Logger.log("  - EVENT: " + transportEventsFormatted[eventIndex].eventTitle);
+    for (let i = indexA; i < transportEventsFormatted.length; i++) {
+      const eventB = transportEventsFormatted[i];
 
-    for (var i = eventIndex; i < transportEventsFormatted.length; i++) {
-      // Checks if is not a stay (less than 2h 30')
-      let isStay = true;
+      if (isStayBetweenEvents(eventA.eventId, eventB.eventId) && locationA === permuteTitle(eventB.origen)) {
+        const startEvent = allEvents.find((e) => e.getId() === eventA.eventId);
+        const endEvent = allEvents.find((e) => e.getId() === eventB.eventId);
 
-      if (eventIndex < transportEventsFormatted.length - 1) {
-        var startEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[eventIndex].eventId);
-        var nextEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[+eventIndex + 1].eventId);
-      }
-
-      if (checkTwoDates(startEvent.getEndTime(), nextEvent.getStartTime(), 240)) {
-        Logger.log("     * Skipping creating Stay Event in " + permuteTitle(location) + ". It's not a stay!");
-        isStay = false;
-      }
-
-      // If is not a stay, lets check with the rest mutual locations
-      if (isStay && location == permuteTitle(transportEventsFormatted[i].origen)) {
-        var startEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[eventIndex].eventId);
-        var endEvent = allEvents.find((obj) => obj.getId() === transportEventsFormatted[i].eventId);
-
-        let startTime = startEvent.getEndTime();
-        let endTime = endEvent.getStartTime();
-
-        // Creates the event in targetCalendar (only if theres one month or less between start and end)
-        if (checkTwoDates(startTime, endTime, rangeTime)) {
-          // Checks if exists already a trip event, and skips if it does
-          let exists = false;
-          let stays = targetCalendar.getEvents(now, dateFromNow);
-
-          for (var staysIndex in stays) {
-            if (checkTwoDates(startTime, targetCalendar.getEventById(stays[staysIndex].getId()).getStartTime(), 5)) {
-              Logger.log("     * Skipping creating Stay Event in " + permuteTitle(location) + ". Already created!");
-              exists = true;
-            }
+        if (checkTwoDates(startEvent.getEndTime(), endEvent.getStartTime(), rangeTime)) {
+          if (!targetCalendar.getEvents(now, dateFromNow).some((e) => checkTwoDates(startEvent.getEndTime(), e.getStartTime(), 5))) {
+            targetCalendar.createEvent(permuteTitle(locationA), startEvent.getEndTime(), endEvent.getStartTime(), { location: locationA });
+            Logger.log(`  * Created new Stay Event in ${locationA}`);
           }
-
-          if (!exists) {
-            targetCalendar.createEvent(permuteTitle(location), startTime, endTime, {
-              location: location,
-            });
-
-            Logger.log("     * Creating new Stay Event in " + permuteTitle(location));
-          }
-          break;
-        } else {
-          Logger.log("     * Theres no one month ");
         }
       }
     }
-  }
-
-  return;
+  });
 }
 
 /**
- * Format title of the event
+ * Format the title of an event according to custom formatting rules.
  *
- * @param {CalendarEvent} Event from we need to get the data
- * @return {array} Collection of matching events
+ * @param {CalendarEvent} event - The event to format.
+ * @return {string} The formatted event title.
  */
 function formatEventTitle(event) {
-  if (!customFormatForEvent) {
-    return event.getTitle();
-  }
+  if (!customFormatForEvent) return event.getTitle();
 
-  data = transportEventsFormatted.find((obj) => obj.eventId === event.getId());
-
-  return data.origen + " → " + data.destination;
+  const eventData = transportEventsFormatted.find((e) => e.eventId === event.getId());
+  return `${eventData.origen} → ${eventData.destination}`;
 }
 
 /**
- * Generate trip events for round trips. Having 2 trips A and B, we need to detect
- * go & back trips (A.origen == B.destination and A.origen == B.destination)
+ * Return the permuted title if exists, otherwise capitalize each word in the title.
  *
- * @param {CalendarEvent} Event from we need to get the data
- * @return {array} Collection of matching events
+ * @param {string} origTitle - The original title.
+ * @return {string} The permuted or capitalized title.
  */
 function permuteTitle(origTitle) {
-  var title = permuter[origTitle];
-
-  return title ? capitalizeFirstLetter(title) : capitalizeFirstLetter(origTitle);
+  return permuter[origTitle] ? capitalizeFirstLetter(permuter[origTitle]) : capitalizeFirstLetter(origTitle);
 }
 
 /**
- * Capitalize first letter of each word in the string recieved by parameter
+ * Capitalize the first letter of each word in a given text.
  *
- * @param {string} text to format
- * @return {string} text formatted
+ * @param {string} text - The text to format.
+ * @return {string} The formatted text.
  */
 function capitalizeFirstLetter(text) {
-  const textSplitted = text.toLowerCase().split(" ");
-
-  for (var i = 0; i < textSplitted.length; i++) {
-    textSplitted[i] = textSplitted[i].charAt(0).toUpperCase() + textSplitted[i].slice(1);
-  }
-
-  return textSplitted.join(" ");
+  return text
+    .toLowerCase()
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 /**
- * Checks if the difference between two dates is in the range
+ * Check if the time difference between two dates is within the specified range.
  *
- * @param {Date} date number 1 to be compared
- * @param {Date} date number 2 to be compared
- * @param {number} maximum range where the difference should be
- * @return {boolean} true if the difference is in the rande
+ * @param {Date} date1 - The first date.
+ * @param {Date} date2 - The second date.
+ * @param {number} range - The range in minutes.
+ * @return {boolean} True if the time difference is within the range.
  */
 function checkTwoDates(date1, date2, range) {
-  let timeDifference = (date1 - date2) / 60000;
+  const diffMinutes = (date1 - date2) / 60000;
+  return Math.abs(diffMinutes) < range;
+}
 
-  // Delete stay if difference is less than 1 min
-  if (timeDifference < range && -1 * range < timeDifference) {
-    return true;
-  }
-
-  return false;
+/**
+ * Check if two events are not considered as a stay (i.e., time difference is too small).
+ *
+ * @param {string} startEventId - The ID of the first event.
+ * @param {string} nextEventId - The ID of the next event.
+ * @return {boolean} True if the time between the two events indicates no stay.
+ */
+function isStayBetweenEvents(startEventId, nextEventId) {
+  const startEvent = allEvents.find((e) => e.getId() === startEventId);
+  const nextEvent = allEvents.find((e) => e.getId() === nextEventId);
+  return checkTwoDates(startEvent.getEndTime(), nextEvent.getStartTime(), 240);
 }

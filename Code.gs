@@ -1,19 +1,12 @@
-/*
+/**
  *=========================================
- *       INSTALLATION INSTRUCTIONS
+ *           ABOUT THE AUTHOR
  *=========================================
  *
- * 1) Make a copy:
- *      New Interface: Go to the project overview icon on the left (looks like this: ⓘ), then click the "copy" icon on the top right (looks like two files on top of each other)
- *      Old Interface: Click in the menu "File" > "Make a copy..." and make a copy to your Google Drive
- * 2) Settings: Change lines 24-50 to be the settings that you want to use
- * 3) Install:
- *      New Interface: Make sure your toolbar says "install" to the right of "Debug", then click "Run"
- *      Old Interface: Click "Run" > "Run function" > "install"
- * 4) Authorize: You will be prompted to authorize the program and will need to click "Advanced" > "Go to GAS-Trip-Automatization (unsafe)"
- * 5) You can also run "startSync" if you want to sync only once (New Interface: change the dropdown to the right of "Debug" from "install" to "startSync")
+ * This program was created by Juan Antonio Muñoz Gómez (Juanan)
  *
- * **To stop the Script from running click in the menu "Run" > "Run function" > "uninstall" (New Interface: change the dropdown to the right of "Debug" from "install" to "uninstall")
+ * If you would like to see other programs Juanan has made, you can check out
+ * his website: juananmgz.com or his github: https://github.com/juananmgz
  *
  *=========================================
  *               SETTINGS
@@ -114,91 +107,39 @@ var transportEventsFormatted = [];
 var matchedEvents = [];
 
 function startSync() {
-  if (PropertiesService.getUserProperties().getProperty("LastRun") > 0 && new Date().getTime() - PropertiesService.getUserProperties().getProperty("LastRun") < 360000) {
-    Logger.log("Another iteration is currently running! Exiting...");
+  const lastRun = PropertiesService.getUserProperties().getProperty("LastRun");
+  const timeSinceLastRun = new Date().getTime() - lastRun;
+  if (lastRun && timeSinceLastRun < 360000) {
+    Logger.log("[❗] Another sync is currently running! Exiting...");
     return;
   }
-
   PropertiesService.getUserProperties().setProperty("LastRun", new Date().getTime());
 
-  //------------------------ Reset globals ------------------------
-  sourceCalendar = null;
-  sourceCalendarId = "";
-  targetCalendar = null;
-  targetCalendarId = "";
-  allEvents = [];
-  transportEvents = [];
-  transportEventsFormatted = [];
+  resetGlobals();
 
-  //------------------------ Get Source Calendar ------------------------
-  Logger.log('Getting "' + sourceCalendarName + '" Source Calendar');
-  sourceCalendar = getCalendar(sourceCalendarName);
+  sourceCalendar = getCalendar(SOURCE_CALENDAR);
+  if (!sourceCalendar) return Logger.log("[❗] Source calendar not found!");
 
-  if (sourceCalendar == null) {
-    Logger.log("Sync failed!");
-    return;
-  }
+  targetCalendar = getCalendar(TARGET_CALENDAR);
+  if (!targetCalendar) return Logger.log("[❗] Target calendar not found!");
 
-  sourceCalendarId = sourceCalendar.getId();
-
-  //------------------------ Get Target Calendar ------------------------
-  Logger.log('Getting "' + targetCalendarName + '" Target Calendar');
-  targetCalendar = getCalendar(targetCalendarName);
-
-  if (targetCalendar == null) {
-    Logger.log("Sync failed!");
-    return;
-  }
-
-  sourceCalendarId = sourceCalendar.getId();
-
-  //------------------------ Find matching elements of Source Calendar ------------------------
   allEvents = getEventsFromCalendar(sourceCalendar);
 
-  //------------------------ Detect transport events --------------------------
-  Logger.log('Finding matching elements on "' + sourceCalendarName + '" Source Calendar');
-  checkMatchingElements();
+  detectTransportEvents();
 
-  //------------------------ Extra Features ------------------------
-  Logger.log("Executing extra features");
+  executeExtraFeatures();
 
-  for (var eventIndex in transportEvents) {
-    //------------------------ Rename events on Source Calendar ------------------------
-    if (renameExistingEvents) {
-      Logger.log("  - Renaming events");
-      transportEvents[eventIndex].setTitle(formatEventTitle(transportEvents[eventIndex]));
-    }
-
-    //------------------------ Recolor events on Source Calendar ------------------------
-    if (recolorExistingEvents) {
-      Logger.log("  - Recoloring events");
-      transportEvents[eventIndex].setColor(newColor);
-    }
-
-    //------------------------ Move event to Target Calendar ------------------------
-    if (moveEventsToNewCalendar) {
-      Logger.log('  - Moving matched events to "' + targetCalendarName + '" Target Calendar');
-      createEventInNewCalendar(transportEvents[eventIndex], targetCalendar);
-    }
-  }
-
-  //------------------------ Create trip event in Target Calendar ------------------------
-  if (createTripEvent) {
-    Logger.log("Creating trip stays events");
+  if (ENABLE_TRIP_EVENT) {
+    Logger.log("Creating trip stay events");
     generateTripEvents();
   }
 
-  //------------------------ Remove old events from Source Calendar ------------------------
-  if (deleteExistingEvents) {
-    if (moveEventsToNewCalendar) {
-      Logger.log('Removing matched events to "' + sourceCalendarName + '" Source Calendar');
-      removeEventsInOldCalendar(transportEvents);
-    } else {
-      Logger.log("[ERROR] For removing events, you need to move them to other calendar!");
-    }
+  if (DELETE_EVENTS && MOVE_EVENTS) {
+    Logger.log("Removing matched events from source calendar");
+    removeEventsInOldCalendar(transportEvents);
+  } else if (DELETE_EVENTS && !MOVE_EVENTS) {
+    Logger.log("[❗] Deleting events requires moving them first!");
   }
-
-  //------------------------ Add Recurring Event Instances ------------------------
 
   Logger.log("Sync finished!");
   PropertiesService.getUserProperties().setProperty("LastRun", 0);
@@ -210,9 +151,9 @@ function startSync() {
  *=========================================
  */
 
-const createTestSuite = true;   // Create test suite to test new features
-const cleanTestSuite = true;    // Clean test suite to test new features
-const testSuiteChosen = 1;      // You may chose: 1 [simple trip], 2 [2 stays continuous trip], 3 [5 stays continuous trip], 4 [stays overlapping], 5 [TO DO: complex trip]
+const createTestSuite = true; // Create test suite to test new features
+const cleanTestSuite = true; // Clean test suite to test new features
+const testSuiteChosen = 1; // You may chose: 1 [simple trip], 2 [2 stays continuous trip], 3 [5 stays continuous trip], 4 [stays overlapping], 5 [TO DO: complex trip]
 
 function startTestSuite() {
   PropertiesService.getUserProperties().setProperty("LastRun", new Date().getTime());
